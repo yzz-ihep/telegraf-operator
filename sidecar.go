@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/influxdata/toml"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -39,6 +40,10 @@ const (
 	TelegrafInterval = "telegraf.influxdata.com/interval"
 	// TelegrafRawInput is used to configure custom inputs for telegraf
 	TelegrafRawInput = "telegraf.influxdata.com/inputs"
+	// TelegrafRawInput is used to configure custom outputs for telegraf
+	TelegrafRawOutput = "telegraf.influxdata.com/outputs"
+	// TelegrafRawInput is used to configure custom outputs for telegraf
+	TelegrafEnableCapabilities = "telegraf.influxdata.com/enableCapabilities"
 	// TelegrafEnableInternal enabled internal input plugins for
 	TelegrafEnableInternal = "telegraf.influxdata.com/internal"
 	// TelegrafClass configures which kind of class to use (classes are configured on the operator)
@@ -254,6 +259,9 @@ func (h *sidecarHandler) assembleConf(pod *corev1.Pod, classData string) (telegr
 	if inputsRaw, ok := pod.Annotations[TelegrafRawInput]; ok {
 		telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, inputsRaw)
 	}
+	if inputsRaw, ok := pod.Annotations[TelegrafRawOutput]; ok {
+		telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, inputsRaw)
+	}
 	telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, classData)
 
 	if _, err := toml.Parse([]byte(telegrafConf)); err != nil {
@@ -310,6 +318,7 @@ func (h *sidecarHandler) newContainer(pod *corev1.Pod, containerName string) (co
 	var telegrafRequestsMemory string
 	var telegrafLimitsCPU string
 	var telegrafLimitsMemory string
+	var telegrafSecurityContext corev1.SecurityContext
 
 	if customTelegrafImage, ok := pod.Annotations[TelegrafImage]; ok {
 		telegrafImage = customTelegrafImage
@@ -336,6 +345,17 @@ func (h *sidecarHandler) newContainer(pod *corev1.Pod, containerName string) (co
 	} else {
 		telegrafLimitsMemory = h.LimitsMemory
 	}
+	if customSecurityContext, ok := pod.Annotations[TelegrafEnableCapabilities]; ok {
+		if customSecurityContext == "true" {
+			tmp := corev1.SecurityContext{
+				Capabilities: &v1.Capabilities{
+					Add:  []v1.Capability{v1.Capability("SYS_PTRACE")},
+					Drop: []v1.Capability{},
+				},
+			}
+			telegrafSecurityContext = tmp
+		}
+	}
 
 	var parsedRequestsCPU resource.Quantity
 	var parsedRequestsMemory resource.Quantity
@@ -358,8 +378,9 @@ func (h *sidecarHandler) newContainer(pod *corev1.Pod, containerName string) (co
 	}
 
 	baseContainer := corev1.Container{
-		Name:  containerName,
-		Image: telegrafImage,
+		Name:            containerName,
+		Image:           telegrafImage,
+		SecurityContext: &telegrafSecurityContext,
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":    parsedLimitsCPU,

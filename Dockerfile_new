@@ -1,0 +1,6 @@
+# Build the manager binary
+FROM golang:1.13
+
+COPY bin/manager /usr/local/bin
+WORKDIR /usr/local/bin
+ENTRYPOINT ["./manager"]
