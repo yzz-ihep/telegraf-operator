@@ -9,7 +9,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/influxdata/toml"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -42,8 +41,8 @@ const (
 	TelegrafRawInput = "telegraf.influxdata.com/inputs"
 	// TelegrafRawInput is used to configure custom outputs for telegraf
 	TelegrafRawOutput = "telegraf.influxdata.com/outputs"
-	// TelegrafRawInput is used to configure custom outputs for telegraf
-	TelegrafEnableCapabilities = "telegraf.influxdata.com/enableCapabilities"
+	// TelegrafRawInput is used to configure custom Capabilities for telegraf
+	TelegrafEnableSystrace = "telegraf.influxdata.com/systrace"
 	// TelegrafEnableInternal enabled internal input plugins for
 	TelegrafEnableInternal = "telegraf.influxdata.com/internal"
 	// TelegrafClass configures which kind of class to use (classes are configured on the operator)
@@ -254,13 +253,13 @@ func (h *sidecarHandler) assembleConf(pod *corev1.Pod, classData string) (telegr
 		}
 	}
 	if enableInternal {
-		telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, fmt.Sprintf("[[inputs.internal]]\n"))
+		telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, "[[inputs.internal]]\n")
 	}
 	if inputsRaw, ok := pod.Annotations[TelegrafRawInput]; ok {
 		telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, inputsRaw)
 	}
-	if inputsRaw, ok := pod.Annotations[TelegrafRawOutput]; ok {
-		telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, inputsRaw)
+	if outputsRaw, ok := pod.Annotations[TelegrafRawOutput]; ok {
+		telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, outputsRaw)
 	}
 	telegrafConf = fmt.Sprintf("%s\n%s", telegrafConf, classData)
 
@@ -345,12 +344,12 @@ func (h *sidecarHandler) newContainer(pod *corev1.Pod, containerName string) (co
 	} else {
 		telegrafLimitsMemory = h.LimitsMemory
 	}
-	if customSecurityContext, ok := pod.Annotations[TelegrafEnableCapabilities]; ok {
+	if customSecurityContext, ok := pod.Annotations[TelegrafEnableSystrace]; ok {
 		if customSecurityContext == "true" {
 			tmp := corev1.SecurityContext{
-				Capabilities: &v1.Capabilities{
-					Add:  []v1.Capability{v1.Capability("SYS_PTRACE")},
-					Drop: []v1.Capability{},
+				Capabilities: &corev1.Capabilities{
+					Add:  []corev1.Capability{corev1.Capability("SYS_PTRACE")},
+					Drop: []corev1.Capability{},
 				},
 			}
 			telegrafSecurityContext = tmp
